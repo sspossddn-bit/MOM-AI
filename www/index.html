@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#b3202a">
+<title>MOM Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Telugu:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="native-shim.js"></script>
+<style>
+/* Layout: phone-first app, four tabs (Record, Transcript, MOM, Saved), MOM shown as an editable paper sheet.
+   Palette: postal red accent on warm-neutral paper; tag colours (key / decision / action) are semantic. */
+:root{
+  --bg:#f3f1ed; --surface:#ffffff; --surface-2:#ebe8e2; --ink:#1e1b18; --ink-2:#645e56; --line:#d8d3ca;
+  --accent:#b3202a; --accent-ink:#ffffff; --live:#d92d20;
+  --key:#2457c5; --dec:#1d7a4b; --act:#a35a00; --warn:#9a6700;
+  --sans:'IBM Plex Sans','Noto Sans Telugu','Nirmala UI','Gautami',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#131211; --surface:#1d1b19; --surface-2:#2a2724; --ink:#f0ede8; --ink-2:#a69f95; --line:#3a3631;
+    --accent:#e5535c; --accent-ink:#1a0a0b; --live:#ff6b5e;
+    --key:#8aaaf5; --dec:#62d19a; --act:#f2a949; --warn:#e5b75a;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+[hidden]{display:none!important}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h2,h3{margin:0;text-wrap:balance}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ic{width:20px;height:20px;flex:none}
+
+.appbar{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:600;font-size:17px;letter-spacing:.01em}
+.sub{font-size:12px;color:var(--ink-2)}
+.pill{font-size:12px;font-weight:500;padding:4px 10px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.pill.live{background:color-mix(in srgb,var(--live) 16%,transparent);color:var(--live)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+
+main{padding-top:16px;padding-bottom:16px;display:flex;flex-direction:column;gap:14px}
+.view{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.card h3{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px}
+.muted{color:var(--ink-2)}
+.hint{margin:8px 0 0;font-size:13px;color:var(--ink-2)}
+.notice{border:1px solid color-mix(in srgb,var(--warn) 55%,var(--line));background:color-mix(in srgb,var(--warn) 12%,var(--surface));border-radius:10px;padding:10px 12px;font-size:14px}
+.notice.err{border-color:color-mix(in srgb,var(--live) 55%,var(--line));background:color-mix(in srgb,var(--live) 10%,var(--surface))}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:500}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent}
+.btn.sm{min-height:36px;padding:0 12px;font-size:14px}
+.btn.block{width:100%}
+.btn:disabled,.mic:disabled{opacity:.45;cursor:not-allowed}
+.icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;background:transparent;color:var(--ink-2);border-radius:8px}
+.icon:hover{background:var(--surface-2);color:var(--ink)}
+
+/* recorder */
+.ctl{display:flex;flex-direction:column;gap:16px}
+.ctl-top{display:flex;align-items:center;gap:18px}
+.mic{position:relative;width:88px;height:88px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;flex:none}
+.mic .ic{width:34px;height:34px;stroke-width:1.7}
+.mic.on{background:var(--live)}
+.mic.on::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--live);opacity:.5;animation:ring 1.6s ease-out infinite}
+@keyframes ring{from{transform:scale(.92);opacity:.6}to{transform:scale(1.18);opacity:0}}
+.timer{font-size:34px;line-height:1.1;font-weight:500}
+.lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.langctl{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.langctl button{min-height:46px;border:0;background:transparent;font-weight:500;font-size:16px}
+.langctl button+button{border-left:1px solid var(--line)}
+.langctl button[aria-checked="true"]{background:var(--ink);color:var(--bg)}
+
+.live{min-height:120px;max-height:36vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.ln{display:flex;gap:8px;align-items:flex-start;line-height:1.45}
+.ln .tx{min-width:0;overflow-wrap:anywhere}
+.ln.interim .tx{color:var(--ink-2);font-style:italic}
+.lg{flex:none;font-family:var(--mono);font-size:11px;font-weight:500;padding:1px 6px;border-radius:5px;background:var(--surface-2);color:var(--ink-2);margin-top:3px}
+.tg{flex:none;font-size:11px;font-weight:600;padding:1px 7px;border-radius:5px;margin-top:3px}
+.tg.key{background:color-mix(in srgb,var(--key) 16%,transparent);color:var(--key)}
+.tg.dec{background:color-mix(in srgb,var(--dec) 16%,transparent);color:var(--dec)}
+.tg.act{background:color-mix(in srgb,var(--act) 18%,transparent);color:var(--act)}
+.empty{color:var(--ink-2);font-size:14px}
+
+.mark{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mark .btn{flex-direction:column;gap:4px;padding:8px 6px;min-height:58px;font-size:14px}
+.mark .k{color:var(--key)} .mark .d{color:var(--dec)} .mark .a{color:var(--act)}
+.note{display:flex;gap:8px}
+.note input{flex:1;min-width:0}
+input[type=text],input[type=date],textarea{width:100%;min-height:44px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:80px;resize:vertical}
+.fields{display:grid;gap:12px}
+details.card>summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:12px}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary span{font-weight:400;color:var(--ink-2);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+details.card[open]>summary{margin-bottom:14px}
+
+/* transcript */
+.segs{display:flex;flex-direction:column;gap:10px}
+.seg{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.seg[data-tag="key"]{border-left:4px solid var(--key)}
+.seg[data-tag="dec"]{border-left:4px solid var(--dec)}
+.seg[data-tag="act"]{border-left:4px solid var(--act)}
+.seg-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.seg-h .t{font-size:12px;color:var(--ink-2)}
+.grow{flex:1}
+.tags{display:flex;gap:6px}
+.tagbtn{min-height:30px;padding:0 10px;border:1px solid var(--line);background:transparent;border-radius:8px;font-size:13px}
+.tagbtn[aria-pressed="true"][data-tag="key"]{background:var(--key);border-color:var(--key);color:var(--bg)}
+.tagbtn[aria-pressed="true"][data-tag="dec"]{background:var(--dec);border-color:var(--dec);color:var(--bg)}
+.tagbtn[aria-pressed="true"][data-tag="act"]{background:var(--act);border-color:var(--act);color:var(--bg)}
+.seg-t{outline:none;overflow-wrap:anywhere;min-height:1.5em}
+.seg-t:focus{background:var(--bg);border-radius:6px}
+
+/* MOM */
+.tools{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media (min-width:560px){.tools{grid-template-columns:repeat(3,1fr)}}
+.paper{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:22px 18px;display:flex;flex-direction:column;gap:18px;min-width:0}
+@media (min-width:560px){.paper{padding:32px 34px}}
+.p-head{text-align:center;display:flex;flex-direction:column;gap:6px}
+.p-org{font-weight:600;font-size:15px}
+.p-head h2{font-size:18px;letter-spacing:.14em;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);padding:6px 0;margin-top:4px}
+.p-meta{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0}
+.p-meta dt{color:var(--ink-2);font-size:13px;padding-top:2px}
+.p-meta dd{margin:0;min-width:0}
+.paper h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:8px}
+.paper ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+.paper [contenteditable]{outline:none;border-radius:4px;overflow-wrap:anywhere}
+.paper [contenteditable]:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.paper [contenteditable]:focus{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+[contenteditable]:empty::before{content:attr(data-ph);color:var(--ink-2);opacity:.8}
+.tw{overflow-x:auto}
+.p-tab{width:100%;border-collapse:collapse;font-size:14px}
+.p-tab th,.p-tab td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.p-tab th{background:var(--surface-2);font-size:12px;letter-spacing:.04em}
+.p-tab tbody{counter-reset:r}
+.p-tab td.n::before{counter-increment:r;content:counter(r)}
+.p-tab td.n{width:32px;color:var(--ink-2)}
+.p-tab td.x{width:36px;padding:2px}
+.addrow{margin-top:8px;border:1px dashed var(--line);background:transparent;border-radius:8px;min-height:34px;padding:0 12px;font-size:13px;color:var(--ink-2)}
+.addrow:hover{color:var(--ink);border-color:var(--ink-2)}
+.p-sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px;font-size:13px;color:var(--ink-2)}
+.p-sign div{border-top:1px solid var(--ink-2);padding-top:6px;margin-top:34px}
+
+/* saved */
+.hrow{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.hmain{flex:1;min-width:0}
+.htitle{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hsub{font-size:13px;color:var(--ink-2)}
+
+/* tab bar */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px 8px;font-size:12px;color:var(--ink-2);border-top:2px solid transparent;margin-top:-1px}
+.tab[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent);font-weight:600}
+
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;z-index:40;max-width:90vw;text-align:center}
+
+@media (prefers-reduced-motion: reduce){.mic.on::after{animation:none}}
+@media print{
+  body{background:#fff;color:#000;padding:0}
+  .appbar,.tabbar,.toast,.no-print,#notice,.view:not(#v-mom) #momTools{display:none!important}
+  main{padding:0}
+  .paper{border:0;padding:0;background:#fff;color:#000}
+  .paper h3,.p-meta dt,.p-sign{color:#333}
+  .p-tab th,.p-tab td{border-color:#555}
+  .p-tab th{background:#eee}
+  .paper [contenteditable]:hover{background:none}
+  [contenteditable]:empty::before{content:""}
+}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="wrap bar">
+    <div>
+      <div class="brand">MOM Recorder</div>
+      <div class="sub">English · <span lang="te">తెలుగు</span></div>
+    </div>
+    <span id="pill" class="pill">Ready</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="notice" class="notice" role="status" hidden></div>
+
+  <!-- RECORD -->
+  <section id="v-rec" class="view">
+    <div class="card ctl">
+      <div class="ctl-top">
+        <button id="btnMic" class="mic" type="button" aria-label="Start listening"></button>
+        <div>
+          <div id="timer" class="timer mono">00:00</div>
+          <div id="micLabel" class="muted">Tap to start listening</div>
+        </div>
+      </div>
+      <div>
+        <span class="lbl" id="langLbl">Speaking language</span>
+        <div class="langctl" role="radiogroup" aria-labelledby="langLbl">
+          <button type="button" role="radio" data-lang="en" aria-checked="true">English</button>
+          <button type="button" role="radio" data-lang="te" lang="te" aria-checked="false">తెలుగు</button>
+        </div>
+        <p class="hint">English and Telugu are recognised one at a time. Switch here when the speaker changes language. Keep the screen on and the phone near the speakers.</p>
+      </div>
+      <button id="btnDone" class="btn primary block" type="button" disabled>Meeting over · Create MOM</button>
+    </div>
+
+    <div class="card">
+      <h3>Live</h3>
+      <div id="live" class="live" aria-live="polite"><div class="empty">What is said will appear here as it is heard.</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Tag the last thing said</h3>
+      <div class="mark">
+        <button class="btn k" type="button" data-mark="key" disabled><span data-ic="flag"></span>Key point</button>
+        <button class="btn d" type="button" data-mark="dec" disabled><span data-ic="check"></span>Decision</button>
+        <button class="btn a" type="button" data-mark="act" disabled><span data-ic="list"></span>Action</button>
+      </div>
+      <p class="hint">Tagged lines go straight into the matching MOM section. Untagged lines are sorted automatically.</p>
+      <form id="noteForm" class="note" style="margin-top:12px" autocomplete="off">
+        <input id="noteIn" type="text" placeholder="Type a note, if it is quicker" aria-label="Type a note">
+        <button class="btn" type="submit"><span data-ic="plus"></span>Add</button>
+      </form>
+    </div>
+
+    <details id="detailsCard" class="card">
+      <summary>Meeting details <span id="detailsSum">Subject, venue, attendees</span></summary>
+      <div class="fields">
+        <div><label class="lbl" for="d-org">Office / organisation</label><input id="d-org" data-d="org" type="text"></div>
+        <div><label class="lbl" for="d-title">Subject of meeting</label><input id="d-title" data-d="title" type="text" placeholder="e.g. Monthly review of delivery performance"></div>
+        <div><label class="lbl" for="d-date">Date</label><input id="d-date" data-d="date" type="date"></div>
+        <div><label class="lbl" for="d-venue">Venue</label><input id="d-venue" data-d="venue" type="text"></div>
+        <div><label class="lbl" for="d-chair">Chaired by</label><input id="d-chair" data-d="chair" type="text"></div>
+        <div><label class="lbl" for="d-att">Attendees (comma or new line)</label><textarea id="d-att" data-d="attendees"></textarea></div>
+        <div><label class="lbl" for="d-agenda">Agenda (one item per line, optional)</label><textarea id="d-agenda" data-d="agenda"></textarea></div>
+      </div>
+    </details>
+
+    <button id="btnNew" class="btn ghost block" type="button">Start a new meeting</button>
+  </section>
+
+  <!-- TRANSCRIPT -->
+  <section id="v-tr" class="view" hidden>
+    <div class="card">
+      <h3>Transcript <span id="trCount" class="mono"></span></h3>
+      <p class="hint" style="margin-top:0">Tap a line to correct the text. Use the tags to place a line in Key points, Decisions or Actions.</p>
+    </div>
+    <div id="segList" class="segs"></div>
+    <div id="trEmpty" class="card empty">Nothing recorded yet. Start listening on the Record tab, or type a note.</div>
+  </section>
+
+  <!-- MOM -->
+  <section id="v-mom" class="view" hidden>
+    <div id="momEmpty" class="card">
+      <h3>Minutes of Meeting</h3>
+      <p class="muted" style="margin:0 0 12px">The MOM is created when you tap “Meeting over”. You can also create it from the transcript at any time.</p>
+      <button id="btnGen" class="btn primary" type="button">Create MOM from transcript</button>
+    </div>
+    <div id="momTools" class="tools no-print" hidden>
+      <button class="btn" type="button" data-act="copy"><span data-ic="copy"></span>Copy</button>
+      <button class="btn" type="button" data-act="share"><span data-ic="share"></span>Share</button>
+      <button class="btn" type="button" data-act="word"><span data-ic="download"></span>Word file</button>
+      <button class="btn" type="button" data-act="print"><span data-ic="print"></span>Print / PDF</button>
+      <button class="btn" type="button" data-act="claude"><span data-ic="spark"></span>Polish with Claude</button>
+      <button class="btn ghost" type="button" data-act="regen"><span data-ic="refresh"></span>Regenerate</button>
+    </div>
+    <article id="paper" class="paper" hidden></article>
+  </section>
+
+  <!-- SAVED -->
+  <section id="v-hist" class="view" hidden>
+    <div class="card"><h3>Saved meetings</h3><p class="hint" style="margin-top:0">Every meeting is saved on this phone automatically. Nothing is uploaded.</p></div>
+    <div id="histList" class="segs"></div>
+    <div id="histEmpty" class="card empty">No saved meetings yet.</div>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Sections">
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="rec" aria-selected="true"><span data-ic="mic"></span>Record</button>
+    <button class="tab" role="tab" data-tab="tr" aria-selected="false"><span data-ic="lines"></span>Transcript</button>
+    <button class="tab" role="tab" data-tab="mom" aria-selected="false"><span data-ic="doc"></span>MOM</button>
+    <button class="tab" role="tab" data-tab="hist" aria-selected="false"><span data-ic="bookmark"></span>Saved</button>
+  </div>
+</nav>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+// ==BEGIN GEN==
+// Everything between BEGIN GEN and END GEN is pure logic (no DOM). It turns tagged and untagged transcript lines into MOM sections.
+var TELUGU_RX=/[ఀ-౿]/;
+var FILLER=/^(ok(ay)?|yes|yeah|no|hmm+|hello|hi|good (morning|afternoon|evening)|thank you|thanks|right|fine|sare|సరే|అవును|నమస్కారం|ధన్యవాదాలు|హలో)[.!, ]*$/i;
+var MONTHS='jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+var DAYS='monday|tuesday|wednesday|thursday|friday|saturday|sunday';
+var DUE_RX=[
+  new RegExp('\\b(\\d{1,2}(?:st|nd|rd|th)?\\s*(?:of\\s+)?(?:'+MONTHS+')\\b(?:[,\\s]+\\d{4})?)','i'),
+  new RegExp('\\b((?:'+MONTHS+')\\s+\\d{1,2}(?:st|nd|rd|th)?\\b)','i'),
+  /\b(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?|\d{1,2}\.\d{1,2}\.\d{2,4})\b/,
+  /\b((?:by|before|till|until|on)\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th))\b/i,
+  new RegExp('\\b(today|tonight|tomorrow|day after tomorrow|next week|this week|end of (?:the )?(?:week|month|year)|within (?:a|an|\\d+)\\s*(?:day|days|week|weeks|hour|hours)|(?:next |this |by )?(?:'+DAYS+')|immediately|asap|at the earliest|(?:this|next) month)\\b','i'),
+  /([ఀ-౿]*(?:లోగా|లోపు)|ఈరోజు|ఇవాళ|రేపు|ఎల్లుండి|వచ్చే వారం|ఈ వారం|నెలాఖరు|వారంలోపు|వారం లోపు|రోజుల్లో|సోమవారం|మంగళవారం|బుధవారం|గురువారం|శుక్రవారం|శనివారం|ఆదివారం|వెంటనే)/
+];
+var AC_STRONG_EN=/\b(should|shall|must|need(?:s|ed)? to|has to|have to|ensure|ensured|please|kindly|follow[- ]?up|action (?:point|item|required|taken)|deadline|expedite|to be (?:done|submitted|completed|sent|arranged|ensured|obtained|reported)|will be (?:done|submitted|completed|sent|arranged|ensured|obtained|reported)|submit|arrange|prepare|intimate|coordinate|depute|nominate|report back)\b/i;
+var AC_WEAK_EN=/\b(will|update|review|send|inform|verify|check|call|visit|complete)\b/i;
+var AC_TE=/[ఀ-౿]{3,}ాల్సి|[ఀ-౿]{3,}ాలి(?![ఀ-౿])|చేయండి|చెయ్యండి|పంపండి|చూడండి|ఇవ్వండి|తెలియజేయండి|సమర్పించండి|తీసుకోండి|తప్పనిసరి|గడువు/;
+var DEC_EN=/\b(decided|decision|agreed|approved|resolved|finali[sz]ed|confirmed|concluded|sanctioned|accepted|it was (?:decided|agreed)|henceforth|with immediate effect|going forward)\b/i;
+var DEC_TE=/నిర్ణయ|అంగీకర|ఆమోద|ఒప్పుక|తీర్మాన|ఖరారు/;
+var TOPIC_EN=/\b(issue|problem|pending|target|review|status|complaint|delivery|booking|billing|revenue|backlog|shortage|staff|training|audit|inspection|compliance|progress|performance|budget|scheme|mails?|parcels?|articles?|accounts?|deposits?|beat|sanction|enrol+ment|app|portal|system|server)\b/i;
+var TOPIC_TE=/సమస్య|పెండింగ్|లక్ష్యం|సమీక్ష|ఫిర్యాదు|డెలివరీ|సిబ్బంది|శిక్షణ|పురోగతి|బడ్జెట్|పథకం|కార్యాలయం/;
+var NOT_WHO=/^(we|you|they|it|he|she|i|this|that|these|those|the|there|also|and|but|so|then|now|next|please|kindly|if|when|as|in|on|at|by|for|to|all|everyone|everybody)$/i;
+
+function wc(t){return t.trim().split(/\s+/).filter(Boolean).length;}
+function tidy(t){
+  t=t.replace(/\s+/g,' ').trim();
+  if(!t) return t;
+  t=t.charAt(0).toUpperCase()+t.slice(1);
+  if(!/[.!?।)]$/.test(t)) t+='.';
+  return t;
+}
+function splitList(s){return String(s||'').split(/[\n,;]+/).map(function(x){return x.trim();}).filter(Boolean);}
+function findDue(text){
+  for(var i=0;i<DUE_RX.length;i++){
+    var m=text.match(DUE_RX[i]);
+    if(m){var v=m[1].trim(); return v.charAt(0).toUpperCase()+v.slice(1);}
+  }
+  return '';
+}
+function scoreAction(text){
+  var s=0;
+  if(AC_STRONG_EN.test(text)) s+=2; else if(AC_WEAK_EN.test(text)) s+=1;
+  if(AC_TE.test(text)) s+=2;
+  if(findDue(text)) s+=1;
+  return s;
+}
+function isDecision(text){return DEC_EN.test(text)||DEC_TE.test(text);}
+function findWho(text,attendees){
+  var low=text.toLowerCase();
+  for(var i=0;i<attendees.length;i++){
+    var first=attendees[i].split(/[\s,()-]+/)[0];
+    if(first&&first.length>=3&&low.indexOf(first.toLowerCase())>-1) return attendees[i];
+  }
+  var m=text.match(/\b([A-Z][A-Za-z.]*(?:\s+[A-Z][A-Za-z.]*)?)\s+(?:should|shall|must|will|needs? to|has to|have to)\b/);
+  if(m){
+    var w=m[1].split(/\s+/)[0];
+    if(/^(all|everyone|everybody)$/i.test(w)) return 'All';
+    if(!NOT_WHO.test(w)) return m[1];
+  }
+  return '';
+}
+function scoreKey(text){
+  var w=wc(text);
+  if(FILLER.test(text.trim())) return -1;
+  var min=TELUGU_RX.test(text)?4:6;
+  if(w<min) return -1;
+  var s=Math.min(w,30)/10;
+  if(/\d/.test(text)) s+=1;
+  if(/\b[A-Z]{2,6}\b/.test(text)) s+=0.8;
+  if(TOPIC_EN.test(text)||TOPIC_TE.test(text)) s+=1.2;
+  return s;
+}
+function pad2(n){return (n<10?'0':'')+n;}
+function fmtDate(d){
+  if(!d) return '';
+  var p=String(d).split('-'); if(p.length!==3) return d;
+  var dt=new Date(+p[0],+p[1]-1,+p[2]);
+  return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+function fmtTime(iso){
+  var d=new Date(iso); if(isNaN(d)) return '';
+  return d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).toUpperCase();
+}
+function fmtDur(sec){
+  var m=Math.round((sec||0)/60), h=Math.floor(m/60);
+  return (h?h+' h ':'')+(m%60)+' min';
+}
+function fmtClock(sec){
+  var s=Math.floor(sec||0), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
+  return (h?h+':'+pad2(m):pad2(m))+':'+pad2(ss);
+}
+function buildMom(session){
+  var d=session.details||{};
+  var attendees=splitList(d.attendees);
+  var points=[],decisions=[],actions=[],scored=[];
+  var seen={};
+  session.segs.forEach(function(s,idx){
+    var raw=(s.text||'').trim(); if(!raw) return;
+    var text=tidy(raw);
+    var key=text.toLowerCase().replace(/[^ఀ-౿a-z0-9]+/g,' ').trim();
+    if(!key||seen[key]) return; seen[key]=1;
+    var act=scoreAction(text), dec=isDecision(text);
+    if(s.tag==='act'||(!s.tag&&act>=2)){
+      var who=findWho(text,attendees),due=findDue(text);
+      if(s.tag==='act'||!dec||who||due) actions.push({task:text,who:who,due:due});
+    }
+    if(s.tag==='dec'||(!s.tag&&dec)) decisions.push(text);
+    if(s.tag==='key') points.push({idx:idx,text:text,score:99});
+    else if(!s.tag&&!(act>=2)&&!dec){
+      var sc=scoreKey(text);
+      if(sc>0) scored.push({idx:idx,text:text,score:sc});
+    }
+  });
+  var room=Math.max(0,14-points.length);
+  scored.sort(function(a,b){return b.score-a.score;});
+  points=points.concat(scored.slice(0,room));
+  points.sort(function(a,b){return a.idx-b.idx;});
+  var st=session.startedAt?fmtTime(session.startedAt):'';
+  var en=session.endedAt?fmtTime(session.endedAt):'';
+  var time=st?(st+(en?' – '+en:'')+(session.elapsed>=60?' ('+fmtDur(session.elapsed)+')':'')):'';
+  return {
+    org:d.org||'', title:d.title||'', date:fmtDate(d.date), time:time, venue:d.venue||'', chair:d.chair||'',
+    attendees:attendees, agenda:splitList(String(d.agenda||'').replace(/,/g,';').replace(/;/g,'\n')),
+    points:points.map(function(p){return p.text;}), decisions:decisions, actions:actions, next:''
+  };
+}
+// ==END GEN==
+
+var $=function(id){return document.getElementById(id);};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+var store={
+  get:function(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}},
+  set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+};
+
+/* icons */
+var P={
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  pause:'<path d="M8 5v14M16 5v14"/>',
+  flag:'<path d="M6 21V4M6 5h11l-2 4 2 4H6"/>',
+  check:'<path d="M5 12l5 5 9-10"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
+  copy:'<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  share:'<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6"/>',
+  download:'<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+  print:'<path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"/><rect x="7" y="14" width="10" height="6"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  refresh:'<path d="M20 11a8 8 0 0 0-14-4M4 5v4h4M4 13a8 8 0 0 0 14 4M20 19v-4h-4"/>',
+  spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
+  lines:'<path d="M5 6h14M5 10h14M5 14h9M5 18h6"/>',
+  doc:'<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/>',
+  bookmark:'<path d="M5 4h14v17l-7-4-7 4z"/>'
+};
+function ic(n){return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+P[n]+'</svg>';}
+document.querySelectorAll('[data-ic]').forEach(function(el){el.innerHTML=ic(el.dataset.ic);el.style.display='inline-flex';});
+
+/* session */
+var DEFAULT_ORG='Office of the Senior Superintendent of Post Offices, Secunderabad Division, Hyderabad';
+function todayStr(){var n=new Date();return n.getFullYear()+'-'+pad2(n.getMonth()+1)+'-'+pad2(n.getDate());}
+function newSession(){
+  return {id:'m'+Date.now().toString(36),
+    details:{org:store.get('mom_org',DEFAULT_ORG),title:'',venue:'',chair:'',attendees:'',date:todayStr(),agenda:''},
+    segs:[],mom:null,startedAt:null,endedAt:null,elapsed:0,lang:'en'};
+}
+var S=store.get('mom_current',null);
+if(!S||!S.segs||!S.details) S=newSession();
+var saveT=null;
+function saveSoon(){clearTimeout(saveT);saveT=setTimeout(function(){store.set('mom_current',S);},400);}
+function saveNow(){clearTimeout(saveT);store.set('mom_current',S);}
+function archive(){
+  if(!S.segs.length&&!S.mom) return;
+  var h=store.get('mom_history',[]);
+  var snap=JSON.parse(JSON.stringify(S));
+  var i=h.findIndex(function(e){return e.id===S.id;});
+  var entry={id:S.id,savedAt:new Date().toISOString(),session:snap};
+  if(i>-1) h[i]=entry; else h.unshift(entry);
+  store.set('mom_history',h.slice(0,20));
+}
+
+/* toast + notice */
+var toastT=null;
+function toast(msg){var t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true;},2600);}
+function notice(msg,kind){var n=$('notice');if(!msg){n.hidden=true;return;}n.textContent=msg;n.className='notice'+(kind==='err'?' err':'');n.hidden=false;}
+
+/* clock */
+var runStart=null,state='idle',tickT=null;
+function elapsedNow(){return S.elapsed+(runStart?(Date.now()-runStart)/1000:0);}
+function bank(){if(runStart){S.elapsed+=(Date.now()-runStart)/1000;runStart=null;}}
+function tickOn(){clearInterval(tickT);tickT=setInterval(function(){$('timer').textContent=fmtClock(elapsedNow());},500);}
+function tickOff(){clearInterval(tickT);}
+
+/* wake lock */
+var wl=null;
+async function acquireWake(){try{if('wakeLock' in navigator){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',function(){wl=null;});}}catch(e){}}
+function releaseWake(){try{if(wl)wl.release();}catch(e){}wl=null;}
+
+/* segments */
+var LG={en:'EN',te:'తె',typed:'Note'};
+var TAGS=[['key','Key'],['dec','Decision'],['act','Action']];
+var TAGNAME={key:'Key point',dec:'Decision',act:'Action'};
+var uid=0;
+function byId(id){return S.segs.find(function(s){return s.id===id;});}
+function setInterim(t){interimText=t;renderLive();}
+var interimText='';
+
+function pushSeg(text,lang){
+  text=String(text).replace(/\s+/g,' ').trim(); if(!text) return;
+  var lg=lang||S.lang, now=Date.now();
+  var last=S.segs[S.segs.length-1];
+  if(last&&last.lang===lg&&lg!=='typed'&&last.ts&&now-last.ts<10000){
+    var a=last.text.toLowerCase(),b=text.toLowerCase();
+    if(a===b||a.indexOf(b)===0) return;
+    if(b.indexOf(a)===0){
+      last.text=text;last.ts=now;
+      var node=document.querySelector('.seg[data-id="'+last.id+'"] .seg-t');
+      if(node&&document.activeElement!==node) node.textContent=text;
+      renderLive();saveSoon();return;
+    }
+  }
+  var seg={id:'s'+Date.now().toString(36)+(uid++),t:elapsedNow(),lang:lg,text:text,tag:'',ts:now};
+  S.segs.push(seg);
+  var list=$('segList');
+  if(list) list.appendChild(segNode(seg));
+  syncTrMeta();renderLive();ui();saveSoon();
+}
+function segNode(s){
+  var el=document.createElement('article');
+  el.className='seg';el.dataset.id=s.id;el.dataset.tag=s.tag||'';
+  var tags=TAGS.map(function(t){return '<button type="button" class="tagbtn" data-tag="'+t[0]+'" aria-pressed="'+(s.tag===t[0])+'">'+t[1]+'</button>';}).join('');
+  el.innerHTML='<div class="seg-h"><span class="mono t">'+fmtClock(s.t)+'</span><span class="lg">'+LG[s.lang]+'</span><span class="grow"></span><div class="tags">'+tags+'</div><button type="button" class="icon del" aria-label="Delete this line">'+ic('trash')+'</button></div><div class="seg-t" contenteditable="true" spellcheck="false" lang="'+(s.lang==='te'?'te':'en')+'"></div>';
+  el.querySelector('.seg-t').textContent=s.text;
+  return el;
+}
+function refreshNode(s){
+  var el=document.querySelector('.seg[data-id="'+s.id+'"]'); if(!el) return;
+  el.dataset.tag=s.tag||'';
+  el.querySelectorAll('.tagbtn').forEach(function(b){b.setAttribute('aria-pressed',String(s.tag===b.dataset.tag));});
+}
+function setTag(s,t){s.tag=(s.tag===t)?'':t;refreshNode(s);renderLive();saveSoon();}
+function renderTranscript(){
+  var list=$('segList');list.innerHTML='';
+  S.segs.forEach(function(s){list.appendChild(segNode(s));});
+  syncTrMeta();
+}
+function syncTrMeta(){
+  $('trEmpty').hidden=S.segs.length>0;
+  $('trCount').textContent=S.segs.length?'· '+S.segs.length+' lines':'';
+}
+function renderLive(){
+  var box=$('live');
+  var last=S.segs.slice(-4);
+  if(!last.length&&!interimText){box.innerHTML='<div class="empty">What is said will appear here as it is heard.</div>';return;}
+  var html=last.map(function(s){
+    return '<div class="ln"><span class="lg">'+LG[s.lang]+'</span><span class="tx">'+esc(s.text)+'</span>'+(s.tag?'<span class="tg '+s.tag+'">'+TAGNAME[s.tag]+'</span>':'')+'</div>';
+  }).join('');
+  if(interimText) html+='<div class="ln interim"><span class="lg">…</span><span class="tx">'+esc(interimText)+'</span></div>';
+  box.innerHTML=html;
+  box.scrollTop=box.scrollHeight;
+}
+
+/* speech engine */
+var rec=null,wantListening=false,netErrs=0,restartT=null;
+function langCode(){return S.lang==='te'?'te-IN':'en-IN';}
+function flushInterim(){
+  var t=interimText.trim();
+  interimText='';
+  if(t) pushSeg(t);
+}
+function spawn(){
+  if(!SR||!wantListening||rec) return;
+  var r=new SR();
+  r.continuous=true;r.interimResults=true;r.lang=langCode();r.maxAlternatives=1;
+  r.onresult=function(e){
+    var interim='';
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      var res=e.results[i],txt=(res[0].transcript||'').trim();
+      if(res.isFinal){if(txt) pushSeg(txt);} else interim+=txt+' ';
+    }
+    netErrs=0;
+    setInterim(interim.trim());
+  };
+  r.onerror=function(e){
+    var c=e.error;
+    if(c==='not-allowed'||c==='service-not-allowed'){haltAfterError('The microphone is blocked. Allow microphone access for this page in the browser settings, then tap the mic again.');}
+    else if(c==='audio-capture'){haltAfterError('No microphone was found on this device.');}
+    else if(c==='language-not-supported'){haltAfterError('This browser cannot recognise this language. Use Chrome.');}
+    else if(c==='network'){netErrs++;if(netErrs>=6) haltAfterError('Speech recognition needs an internet connection and could not reach the service.');}
+  };
+  r.onend=function(){
+    if(rec===r) rec=null;
+    flushInterim();
+    if(wantListening){
+      clearTimeout(restartT);
+      restartT=setTimeout(spawn,netErrs?1500:250);
+    }
+  };
+  rec=r;
+  try{r.start();}catch(err){rec=null;clearTimeout(restartT);restartT=setTimeout(spawn,600);}
+}
+function haltAfterError(msg){
+  wantListening=false;
+  if(rec){try{rec.abort();}catch(e){}}
+  bank();state='paused';tickOff();releaseWake();
+  notice(msg,'err');ui();saveNow();
+}
+function stopRec(){
+  return new Promise(function(res){
+    wantListening=false;clearTimeout(restartT);
+    var r=rec,done=false;
+    function fin(){if(done)return;done=true;flushInterim();res();}
+    if(!r){fin();return;}
+    var prev=r.onend;
+    r.onend=function(){if(prev)prev();fin();};
+    setTimeout(fin,1500);
+    try{r.stop();}catch(e){fin();}
+  });
+}
+function begin(){
+  if(!SR){toast('Voice capture is not available in this browser');return;}
+  notice('');
+  if(!S.startedAt) S.startedAt=new Date().toISOString();
+  S.endedAt=null;
+  wantListening=true;netErrs=0;runStart=Date.now();state='rec';
+  spawn();acquireWake();tickOn();ui();saveNow();
+}
+async function pauseRec(){
+  await stopRec();
+  bank();state='paused';tickOff();releaseWake();ui();saveNow();
+}
+async function finish(){
+  await stopRec();
+  bank();tickOff();releaseWake();state='idle';
+  S.endedAt=new Date().toISOString();
+  S.mom=buildMom(S);
+  archive();saveNow();ui();
+  showTab('mom');
+  toast('MOM created');
+}
+
+/* UI state */
+function ui(){
+  var on=state==='rec';
+  var mic=$('btnMic');
+  mic.classList.toggle('on',on);
+  mic.innerHTML=ic(on?'pause':'mic');
+  mic.disabled=!SR;
+  mic.setAttribute('aria-label',on?'Pause listening':(S.segs.length?'Continue listening':'Start listening'));
+  $('micLabel').textContent=!SR?'Voice capture is not available in this browser':on?'Listening. Tap to pause.':state==='paused'?'Paused. Tap to continue.':(S.segs.length?'Tap to continue the meeting':'Tap to start listening');
+  var pill=$('pill');
+  pill.className='pill'+(on?' live':state==='paused'?' warn':'');
+  pill.textContent=on?'Listening':state==='paused'?'Paused':(S.mom?'MOM ready':'Ready');
+  $('btnDone').disabled=!(S.segs.length||on);
+  document.querySelectorAll('.langctl button').forEach(function(b){b.setAttribute('aria-checked',String(b.dataset.lang===S.lang));});
+  $('timer').textContent=fmtClock(elapsedNow());
+  document.querySelectorAll('[data-mark]').forEach(function(b){b.disabled=!S.segs.length;});
+  var t=S.details.title;
+  $('detailsSum').textContent=t||'Subject, venue, attendees';
+}
+
+/* tabs */
+function showTab(n){
+  ['rec','tr','mom','hist'].forEach(function(k){$('v-'+k).hidden=(k!==n);});
+  document.querySelectorAll('.tab').forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.tab===n));});
+  if(n==='tr') renderTranscript();
+  if(n==='mom') renderMom();
+  if(n==='hist') renderHist();
+  window.scrollTo(0,0);
+}
+
+/* MOM view */
+function renderMom(){
+  var has=!!S.mom;
+  $('momEmpty').hidden=has;
+  $('momTools').hidden=!has;
+  $('paper').hidden=!has;
+  $('btnGen').disabled=!S.segs.length;
+  if(!has) return;
+  var m=S.mom;
+  var li=function(arr,ph){return (arr.length?arr:['']).map(function(t){return '<li contenteditable="true" data-ph="'+ph+'">'+esc(t)+'</li>';}).join('');};
+  var rows=(m.actions.length?m.actions:[{task:'',who:'',due:''}]).map(function(a){return actRow(a);}).join('');
+  $('paper').innerHTML=
+    '<header class="p-head"><div class="p-org" data-f="org" contenteditable="true" data-ph="Office / organisation">'+esc(m.org)+'</div><h2>MINUTES OF MEETING</h2></header>'+
+    '<dl class="p-meta">'+
+      '<dt>Subject</dt><dd data-f="title" contenteditable="true" data-ph="Subject of the meeting">'+esc(m.title)+'</dd>'+
+      '<dt>Date</dt><dd data-f="date" contenteditable="true" data-ph="Date">'+esc(m.date)+'</dd>'+
+      '<dt>Time</dt><dd data-f="time" contenteditable="true" data-ph="Time">'+esc(m.time)+'</dd>'+
+      '<dt>Venue</dt><dd data-f="venue" contenteditable="true" data-ph="Venue">'+esc(m.venue)+'</dd>'+
+      '<dt>Chaired by</dt><dd data-f="chair" contenteditable="true" data-ph="Chairperson">'+esc(m.chair)+'</dd>'+
+    '</dl>'+
+    '<section><h3>Attendees</h3><div data-f="attendees" contenteditable="true" data-ph="Names of attendees, separated by commas">'+esc(m.attendees.join(', '))+'</div></section>'+
+    (m.agenda.length?'<section><h3>Agenda</h3><ol data-list="agenda">'+li(m.agenda,'Agenda item')+'</ol></section>':'')+
+    '<section><h3>Key points discussed</h3><ol data-list="points">'+li(m.points,'Add a point')+'</ol><button type="button" class="addrow no-print" data-add="points">+ Add point</button></section>'+
+    '<section><h3>Decisions</h3><ol data-list="decisions">'+li(m.decisions,'Add a decision')+'</ol><button type="button" class="addrow no-print" data-add="decisions">+ Add decision</button></section>'+
+    '<section><h3>Action items</h3><div class="tw"><table class="p-tab"><thead><tr><th>#</th><th>Action</th><th>Responsible</th><th>By</th><th class="no-print"></th></tr></thead><tbody id="actBody">'+rows+'</tbody></table></div><button type="button" class="addrow no-print" data-add="act">+ Add action</button></section>'+
+    '<section><h3>Next meeting</h3><div data-f="next" contenteditable="true" data-ph="Date and agenda of the next meeting, if fixed">'+esc(m.next)+'</div></section>'+
+    '<div class="p-sign"><div>Prepared by</div><div>Chaired by</div></div>';
+}
+function actRow(a){
+  return '<tr><td class="n"></td><td contenteditable="true" data-c="task" data-ph="Action">'+esc(a.task)+'</td><td contenteditable="true" data-c="who" data-ph="Who">'+esc(a.who)+'</td><td contenteditable="true" data-c="due" data-ph="By when">'+esc(a.due)+'</td><td class="x no-print"><button type="button" class="icon delrow" aria-label="Remove this action">'+ic('trash')+'</button></td></tr>';
+}
+function readMom(){
+  var p=$('paper');
+  if(!S.mom||p.hidden||!p.firstChild) return;
+  var m=S.mom;
+  p.querySelectorAll('[data-f]').forEach(function(el){
+    var k=el.dataset.f,v=el.innerText.replace(/ /g,' ').trim();
+    if(k==='attendees') m.attendees=splitList(v); else m[k]=v;
+  });
+  ['agenda','points','decisions'].forEach(function(k){
+    var ol=p.querySelector('[data-list="'+k+'"]');
+    if(ol) m[k]=Array.prototype.map.call(ol.children,function(li){return li.innerText.trim();}).filter(Boolean);
+  });
+  m.actions=Array.prototype.map.call(p.querySelectorAll('#actBody tr'),function(tr){
+    var g=function(c){return tr.querySelector('[data-c="'+c+'"]').innerText.trim();};
+    return {task:g('task'),who:g('who'),due:g('due')};
+  }).filter(function(a){return a.task||a.who||a.due;});
+}
+
+/* export */
+function momText(m,wa){
+  var B=function(s){return wa?'*'+s+'*':s.toUpperCase();};
+  var L=[];
+  if(m.org) L.push(wa?'*'+m.org+'*':m.org);
+  L.push(wa?'*MINUTES OF MEETING*':'MINUTES OF MEETING','');
+  [['Subject',m.title],['Date',m.date],['Time',m.time],['Venue',m.venue],['Chaired by',m.chair]].forEach(function(x){if(x[1]) L.push(x[0]+': '+x[1]);});
+  if(m.attendees.length) L.push('Attendees: '+m.attendees.join(', '));
+  var sec=function(name,arr){if(!arr.length)return;L.push('',B(name));arr.forEach(function(t,i){L.push((i+1)+'. '+t);});};
+  sec('Agenda',m.agenda);sec('Key points discussed',m.points);sec('Decisions',m.decisions);
+  if(m.actions.length){
+    L.push('',B('Action items'));
+    m.actions.forEach(function(a,i){L.push((i+1)+'. '+a.task+(a.who?' — Responsible: '+a.who:'')+(a.due?' — By: '+a.due:''));});
+  }
+  if(m.next) L.push('',B('Next meeting')+': '+m.next);
+  return L.join('\n');
+}
+function momDocHtml(m){
+  var ol=function(arr){return arr.length?'<ol>'+arr.map(function(t){return '<li>'+esc(t)+'</li>';}).join('')+'</ol>':'<p>—</p>';};
+  var meta=[['Subject',m.title],['Date',m.date],['Time',m.time],['Venue',m.venue],['Chaired by',m.chair]].filter(function(x){return x[1];})
+    .map(function(x){return '<tr><td style="width:90pt"><b>'+x[0]+'</b></td><td>'+esc(x[1])+'</td></tr>';}).join('');
+  var acts=m.actions.length?'<table class="g"><tr><th>#</th><th>Action</th><th>Responsible</th><th>By</th></tr>'+m.actions.map(function(a,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(a.task)+'</td><td>'+esc(a.who)+'</td><td>'+esc(a.due)+'</td></tr>';}).join('')+'</table>':'<p>—</p>';
+  return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>'+esc(m.title||'Minutes of Meeting')+'</title><style>body{font-family:"Nirmala UI","Noto Sans Telugu",Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}h1{text-align:center;font-size:15pt;letter-spacing:2pt}h3{font-size:11pt;border-bottom:1px solid #444;padding-bottom:2pt;margin-top:14pt;text-transform:uppercase}p.o{text-align:center;font-weight:bold}table{border-collapse:collapse;width:100%}table.g td,table.g th{border:1px solid #444;padding:4pt 6pt;vertical-align:top}table.g th{background:#eee;text-align:left}</style></head><body>'+
+    (m.org?'<p class="o">'+esc(m.org)+'</p>':'')+'<h1>MINUTES OF MEETING</h1><table>'+meta+'</table>'+
+    (m.attendees.length?'<h3>Attendees</h3><p>'+esc(m.attendees.join(', '))+'</p>':'')+
+    (m.agenda.length?'<h3>Agenda</h3>'+ol(m.agenda):'')+
+    '<h3>Key points discussed</h3>'+ol(m.points)+'<h3>Decisions</h3>'+ol(m.decisions)+'<h3>Action items</h3>'+acts+
+    (m.next?'<h3>Next meeting</h3><p>'+esc(m.next)+'</p>':'')+
+    '<br><br><table><tr><td style="width:50%">Prepared by</td><td>Chaired by</td></tr></table></body></html>';
+}
+function claudePrompt(){
+  var d=S.details,L=[];
+  L.push('Prepare formal Minutes of Meeting from the transcript below. The transcript is bilingual (English and Telugu) and was captured by speech recognition, so correct obvious mis-hearings from context. Write the MOM in English. Keep official abbreviations exactly as written (for example SPM, DC, NDC, 24-SP). Sections: Meeting details, Attendees, Key points discussed, Decisions taken, Action items (action, responsible, deadline), Next meeting. Keep it brief and formal. Do not invent names, numbers or dates that are not in the transcript. Lines marked KEY, DECISION or ACTION were flagged by me during the meeting.','');
+  [['Office',d.org],['Subject',d.title],['Date',fmtDate(d.date)],['Venue',d.venue],['Chaired by',d.chair],['Attendees',splitList(d.attendees).join(', ')],['Agenda',splitList(d.agenda).join('; ')]].forEach(function(x){if(x[1]) L.push(x[0]+': '+x[1]);});
+  L.push('','Transcript:');
+  S.segs.forEach(function(s){L.push('['+fmtClock(s.t)+'] ('+(s.lang==='te'?'TE':s.lang==='en'?'EN':'NOTE')+')'+(s.tag?' ['+({key:'KEY',dec:'DECISION',act:'ACTION'})[s.tag]+']':'')+' '+s.text);});
+  return L.join('\n');
+}
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);return true;}
+  catch(e){
+    var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    var ok=false;try{ok=document.execCommand('copy');}catch(_){}
+    ta.remove();return ok;
+  }
+}
+function slug(s){return String(s||'meeting').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'meeting';}
+
+async function momAction(a){
+  if(a==='regen') return;
+  readMom();saveNow();
+  var m=S.mom;
+  if(a==='copy'){toast((await copyText(momText(m,false)))?'MOM copied':'Could not copy. Select the text and copy it.');}
+  else if(a==='share'){
+    var text=momText(m,true);
+    if(navigator.share){try{await navigator.share({title:m.title||'Minutes of Meeting',text:text});}catch(e){}}
+    else{window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');}
+  }
+  else if(a==='word'){
+    if(window.nativeSaveDoc){
+      var okN=await window.nativeSaveDoc(slug(m.title)+'-MOM-'+(S.details.date||todayStr())+'.doc','\ufeff'+momDocHtml(m),m.title||'Minutes of Meeting');
+      if(!okN) toast('Could not save the Word file');
+      return;
+    }
+    var blob=new Blob(['﻿',momDocHtml(m)],{type:'application/msword'});
+    var url=URL.createObjectURL(blob);
+    var link=document.createElement('a');link.href=url;link.download=slug(m.title)+'-MOM-'+(S.details.date||todayStr())+'.doc';
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},4000);
+    toast('Word file saved to Downloads');
+  }
+  else if(a==='print'){if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){toast('Use Word file or Share to print from another app');}else{window.print();}}
+  else if(a==='claude'){
+    var ok=await copyText(claudePrompt());
+    toast(ok?'Copied. Paste it into Claude.':'Could not copy the prompt');
+    if(ok) window.open('https://claude.ai/new','_blank');
+  }
+}
+function armConfirm(btn,fn){
+  if(btn.dataset.armed){clearTimeout(+btn.dataset.armed);delete btn.dataset.armed;btn.innerHTML=btn.dataset.html;fn();return;}
+  btn.dataset.html=btn.innerHTML;
+  btn.textContent='Tap again to confirm';
+  btn.dataset.armed=String(setTimeout(function(){delete btn.dataset.armed;btn.innerHTML=btn.dataset.html;},3500));
+}
+
+/* saved */
+function renderHist(){
+  var h=store.get('mom_history',[]),box=$('histList');
+  box.innerHTML='';$('histEmpty').hidden=h.length>0;
+  h.forEach(function(e){
+    var s=e.session,d=s.details,row=document.createElement('div');
+    row.className='hrow';row.dataset.id=e.id;
+    row.innerHTML='<div class="hmain"><div class="htitle">'+esc(d.title||'Untitled meeting')+'</div><div class="hsub">'+esc(fmtDate(d.date))+' · '+s.segs.length+' lines · '+esc(fmtDur(s.elapsed))+(s.mom?' · MOM ready':'')+'</div></div><button type="button" class="btn sm" data-a="open">Open</button><button type="button" class="btn sm ghost" data-a="del">Delete</button>';
+    box.appendChild(row);
+  });
+}
+async function loadSession(sess){
+  await stopRec();bank();tickOff();releaseWake();state='idle';runStart=null;
+  readMom();archive();
+  S=JSON.parse(JSON.stringify(sess));
+  interimText='';bindDetails();saveNow();renderLive();ui();
+  showTab(S.mom?'mom':'rec');
+}
+
+/* details */
+function bindDetails(){
+  document.querySelectorAll('[data-d]').forEach(function(el){el.value=S.details[el.dataset.d]||'';});
+  $('detailsCard').open=!S.details.title;
+}
+
+/* events */
+$('btnMic').addEventListener('click',function(){if(state==='rec') pauseRec(); else begin();});
+$('btnDone').addEventListener('click',function(){finish();});
+document.querySelectorAll('.langctl button').forEach(function(b){
+  b.addEventListener('click',function(){
+    S.lang=b.dataset.lang;ui();saveSoon();
+    if(state==='rec'&&rec){try{rec.stop();}catch(e){}}
+  });
+});
+document.querySelectorAll('[data-mark]').forEach(function(b){
+  b.addEventListener('click',function(){
+    var s=S.segs[S.segs.length-1];if(!s) return;
+    setTag(s,b.dataset.mark);
+    toast(s.tag?'Tagged as '+TAGNAME[s.tag]:'Tag removed');
+  });
+});
+$('noteForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  var v=$('noteIn').value.trim();if(!v) return;
+  pushSeg(v,'typed');$('noteIn').value='';
+});
+document.querySelectorAll('[data-d]').forEach(function(el){
+  el.addEventListener('input',function(){
+    S.details[el.dataset.d]=el.value;
+    if(el.dataset.d==='org') store.set('mom_org',el.value);
+    $('detailsSum').textContent=S.details.title||'Subject, venue, attendees';
+    saveSoon();
+  });
+});
+document.querySelectorAll('.tab').forEach(function(b){b.addEventListener('click',function(){readMom();showTab(b.dataset.tab);});});
+$('segList').addEventListener('click',function(e){
+  var art=e.target.closest('.seg');if(!art) return;
+  var s=byId(art.dataset.id);if(!s) return;
+  var tb=e.target.closest('.tagbtn');
+  if(tb){setTag(s,tb.dataset.tag);return;}
+  if(e.target.closest('.del')){S.segs=S.segs.filter(function(x){return x.id!==s.id;});art.remove();syncTrMeta();renderLive();ui();saveSoon();}
+});
+$('segList').addEventListener('input',function(e){
+  if(!e.target.classList.contains('seg-t')) return;
+  var art=e.target.closest('.seg'),s=byId(art.dataset.id);
+  if(s){s.text=e.target.textContent;saveSoon();}
+});
+$('btnGen').addEventListener('click',function(){
+  S.endedAt=S.endedAt||new Date().toISOString();
+  S.mom=buildMom(S);archive();saveNow();ui();renderMom();
+});
+$('momTools').addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b) return;
+  if(b.dataset.act==='regen'){
+    armConfirm(b,function(){S.mom=buildMom(S);archive();saveNow();renderMom();toast('MOM regenerated from the transcript');});
+    return;
+  }
+  momAction(b.dataset.act);
+});
+var paperT=null;
+$('paper').addEventListener('input',function(){clearTimeout(paperT);paperT=setTimeout(function(){readMom();saveSoon();},500);});
+$('paper').addEventListener('paste',function(e){
+  var t=e.clipboardData&&e.clipboardData.getData('text/plain');
+  if(t!=null){e.preventDefault();document.execCommand('insertText',false,t);}
+});
+$('paper').addEventListener('click',function(e){
+  var add=e.target.closest('[data-add]'),del=e.target.closest('.delrow');
+  if(add){
+    readMom();var k=add.dataset.add;
+    if(k==='act') S.mom.actions.push({task:'',who:'',due:''}); else S.mom[k].push('');
+    renderMom();
+    var target=k==='act'?document.querySelector('#actBody tr:last-child [data-c="task"]'):document.querySelector('[data-list="'+k+'"] li:last-child');
+    if(target) target.focus();
+  }
+  if(del){
+    var tr=del.closest('tr');
+    if(document.querySelectorAll('#actBody tr').length>1) tr.remove(); else tr.querySelectorAll('[data-c]').forEach(function(c){c.textContent='';});
+    readMom();saveSoon();
+  }
+});
+$('histList').addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]');if(!b) return;
+  var id=b.closest('.hrow').dataset.id;
+  var h=store.get('mom_history',[]);
+  if(b.dataset.a==='open'){var en=h.find(function(x){return x.id===id;});if(en) loadSession(en.session);}
+  if(b.dataset.a==='del'){
+    armConfirm(b,function(){store.set('mom_history',store.get('mom_history',[]).filter(function(x){return x.id!==id;}));renderHist();});
+  }
+});
+$('btnNew').addEventListener('click',function(){
+  var b=$('btnNew');
+  if(!S.segs.length&&!S.mom){toast('This meeting is already empty');return;}
+  armConfirm(b,async function(){
+    await stopRec();bank();tickOff();releaseWake();state='idle';runStart=null;
+    readMom();archive();
+    S=newSession();interimText='';bindDetails();saveNow();renderLive();ui();showTab('rec');
+    toast('New meeting ready. The last one is in Saved.');
+  });
+});
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&state==='rec'){
+    acquireWake();
+    if(!rec) spawn();
+  }
+});
+window.addEventListener('pagehide',function(){bank();runStart=state==='rec'?Date.now():null;readMom();saveNow();});
+
+/* boot */
+if(S.segs.length&&!S.endedAt&&S.startedAt) state='paused';
+bindDetails();renderLive();ui();
+if(!SR) notice('Voice capture needs Chrome (Android or desktop) or Edge. In this browser you can still type notes and create the MOM.','err');
+else if(location.protocol==='file:') notice('Opened from a file: Chrome may ask for the microphone more than once. For a smooth meeting, host this file on any https page (for example Netlify Drop or GitHub Pages).');
+else if(!window.isSecureContext) notice('This page is not on a secure (https) address, so the browser may block the microphone.','err');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "appId": "in.postal.momrecorder",
+  "appName": "MOM Recorder",
+  "webDir": "www",
+  "backgroundColor": "#b3202a",
+  "android": { "allowMixedContent": false }
+}
